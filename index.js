@@ -1,48 +1,56 @@
 const cors = require('cors');
-const path = require("path");
-const multer = require("multer")
 const express = require("express");
-const bodyParser = require("body-parser");
-const routerPath = require("./utils/routes");
-const mongoConnect = require("./utils/db").mongoConnect
-
-const app = express();
 require("dotenv").config();
 
-app.use(express.urlencoded({ extended: false }));
+const routerPath = require("./utils/routes");
+const mongoConnect = require("./utils/db").mongoConnect;
+
+const app = express();
+
+// ==================== MIDDLEWARE ====================
 app.use(express.json());
+app.use(express.urlencoded({ extended: false }));
 
-// app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-
-const corsOptions = {
-    origin: ['http://localhost:3000', 'https://ozodov-mirabzal.vercel.app'], // Replace with your client's URL
+// ==================== CORS (TO‘G‘RI) ====================
+app.use(cors({
+    origin: [
+        'http://localhost:3000',
+        'https://ozodov-mirabzal.vercel.app'
+    ],
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization']
-};
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: true,
+}));
 
-app.use(cors(corsOptions));
+// ❗ OPTIONS handle
+app.options('*', cors());
 
-app.use((req, res, next) => {
-    res.setHeader("Access-Control-Allow-Origin", "*");
-    res.setHeader("Access-Control-Allow-Methods", "OPTIONS, GET, POST, PUT, PATCH, DELETE");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
-    if (req.method === "OPTIONS") return res.sendStatus(200);
+// ==================== ROUTES ====================
+app.use(routerPath);
 
-    next();
-});
-
-app.use(express.json());
-app.use(express.urlencoded({ extended: false }));
-app.use(routerPath)
-
+// ==================== ERROR ====================
 app.use((err, req, res, next) => {
-    res.status(err.statusCode || 500).json({ message: err.message || "Internal server error" });
+    res.status(err.statusCode || 500).json({
+        message: err.message || "Internal server error"
+    });
 });
 
-app.use((req, res, next) => {
+app.use((req, res) => {
     res.status(404).json({ message: "Route not found" });
 });
 
-mongoConnect(() => {
-    app.listen(process.env.PORT || 8000, () => console.log("Server Starting..."))
-})
+// ==================== MONGO ====================
+let isConnected = false;
+
+async function connectDB() {
+    if (!isConnected) {
+        await new Promise((resolve) => mongoConnect(resolve));
+        isConnected = true;
+    }
+}
+
+// ==================== ❗ VERCEL EXPORT ====================
+module.exports = async (req, res) => {
+    await connectDB();
+    return app(req, res);
+};
